@@ -1,0 +1,16 @@
+node_modules
+dist
+dist-ssr
+coverage
+.git
+.vscode
+.idea
+.claude
+deploy
+scripts
+docker-compose.yaml
+Dockerfile
+*.log
+*.local
+*.tsbuildinfo
+.eslintcache

@@ -35,6 +35,25 @@ token exchange needs; both are remembered.
 Export `USERNAME_SMTP`/`PASSWORD_SMTP` before `docker compose up` if you would
 rather have Verys email real codes.
 
+## Docker image
+
+The `Dockerfile` builds the bundle with Node and serves it with nginx on port
+8080, the same shape as the other front ends in the `deploy` submodule. Vite
+inlines the `VITE_*` settings at build time, so the target environment is fixed
+when the image is built; the defaults point at `api.chud-money.mcmlln.dev` and
+`api.verys.mcmlln.dev` with the client ids from `.env.example`.
+
+```sh
+docker build -t chud-money-client .
+docker build -t chud-money-client --build-arg VITE_API_BASE=https://api.example.com .
+docker run --rm -p 8080:8080 chud-money-client
+```
+
+The image is not part of `docker-compose.yaml`, which only runs what this app
+depends on; use `npm run dev` locally. For a deployment the Verys used there
+must have the SPA's origin in the SPA client's `redirect_uris` (both
+`/auth/callback` and `/`) and in its CORS `ALLOWED_ORIGINS`.
+
 ## Recommended IDE Setup
 
 [VS Code](https://code.visualstudio.com/) + [Vue (Official)](https://marketplace.visualstudio.com/items?itemName=Vue.volar) (and disable Vetur).
