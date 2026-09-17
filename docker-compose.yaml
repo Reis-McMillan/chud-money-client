@@ -1,0 +1,169 @@
+# Everything this frontend depends on: the chud-money API/websocket proxy and
+# its own dependencies, MongoDB (market documents) and QuestDB (index
+# timeseries), plus Verys (login and token exchange). The frontend itself runs
+# with `npm run dev` against VITE_API_BASE=http://localhost:3000; copy
+# .env.example to .env.local, its Verys values match what is seeded here.
+#
+#   docker compose up -d --build
+#
+# The api image is built from the sibling backend checkout (CHUD_MONEY_DIR,
+# default ../chud-money). Kalshi credentials come from that repo's .env.local;
+# the RSA private key is mounted read-only from KALSHI_PRIVATE_KEY_FILE on the
+# host (default ~/.ssh/id_kalshi) and never baked into the image. Service
+# hostnames below override the localhost defaults in .env.local so the api
+# container reaches mongo/questdb/verys on the compose network.
+#
+# The verys image is built from the sibling checkout (VERYS_DIR, default
+# ../verys) with its dev config, which hard-codes the issuer as
+# http://localhost:8080 and allows the SPA origin http://localhost:5173. The
+# `verys-seed` one-shot then creates the two OAuth clients, the `chud-money`
+# role and a test user (scripts/verys-seed.js). The dev Verys has no SMTP, so
+# login codes never arrive by email: run scripts/verys-dev-login.sh instead.
+
+services:
+  mongo:
+    image: mongo:7
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+  questdb:
+    image: questdb/questdb:10.0.1
+    ports:
+      - "9000:9000"   # HTTP: ILP ingestion, REST /exec, web console
+      - "8812:8812"   # PGWire
+    environment:
+      QDB_PG_USER: admin
+      QDB_PG_PASSWORD: quest
+    volumes:
+      - questdb-data:/var/lib/questdb
+    healthcheck:
+      # The image has no curl; poke the health endpoint over /dev/tcp. It lives
+      # on the min-HTTP server (9003), not the web console/REST port (9000).
+      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/127.0.0.1/9003 && printf \"GET / HTTP/1.0\\r\\n\\r\\n\" >&3 && head -c 12 <&3 | grep -q 200'"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+
+  api:
+    build:
+      context: ${CHUD_MONEY_DIR:-../chud-money}
+      dockerfile: Dockerfile
+    image: chud-money:local
+    ports:
+      - "3000:3000"
+    env_file:
+      - ${CHUD_MONEY_DIR:-../chud-money}/.env.local
+    environment:
+      BIND_ADDR: 0.0.0.0:3000
+      # Browser-facing base for the proxy websocket URLs stored on each market.
+      PUBLIC_WS_BASE: ${PUBLIC_WS_BASE:-ws://localhost:3000}
+      MONGO_URI: mongodb://mongo:27017
+      MONGO_DB: ${MONGO_DB:-chud}
+      QUESTDB_ILP_CONF: "http::addr=questdb:9000;"
+      QUESTDB_PG_HOST: questdb
+      QUESTDB_PG_PORT: "8812"
+      QUESTDB_PG_USER: admin
+      QUESTDB_PG_PASSWORD: quest
+      QUESTDB_PG_DB: qdb
+      KALSHI_PRIVATE_KEY_PATH: /run/secrets/kalshi_key
+      # Where the signing key is fetched (in-network) versus the `iss` Verys
+      # stamps into tokens (its browser-facing dev issuer); they differ here.
+      AUTH_URL: http://verys:8080
+      VERYS_ISSUER: http://localhost:8080
+      # The audience the SPA exchanges its Verys session for; seeded below.
+      CHUD_MONEY_API_CLIENT_ID: ${CHUD_MONEY_API_CLIENT_ID:-chud-money-api}
+    secrets:
+      - kalshi_key
+    depends_on:
+      mongo:
+        condition: service_healthy
+      questdb:
+        condition: service_healthy
+      verys:
+        condition: service_healthy
+    restart: unless-stopped
+
+  verys:
+    build:
+      context: ${VERYS_DIR:-../verys}
+      args:
+        ENV: dev   # config.dev.py is baked in at build time
+    image: verys:local
+    ports:
+      - "8080:8080"   # fixed: the dev issuer is http://localhost:8080
+    volumes:
+      - verys-keys:/keys
+    environment:
+      MONGO_URI: mongodb://mongo:27017
+      MONGO_DB_NAME: verys
+      # Verys refuses to start without a client to seed, and rewrites that
+      # client's redirect_uris on every boot, so it gets a throwaway id rather
+      # than the SPA client (which needs a second redirect URI for sign-out).
+      VERYS_CLIENT_ID: verys-client
+      VERYS_CLIENT_REDIRECT_URI: http://localhost:5173/auth/callback
+      VERYS_CLIENT_REGISTRATION_URI: http://localhost:8080/register/
+      # Optional: PEM Ed25519 key. Otherwise one is generated once into the
+      # `verys-keys` volume, so tokens stay valid across restarts.
+      JWT_PRIVATE_KEY: ${JWT_PRIVATE_KEY:-}
+      # Optional: real SMTP credentials make the login page deliver codes.
+      USERNAME_SMTP: ${USERNAME_SMTP:-}
+      PASSWORD_SMTP: ${PASSWORD_SMTP:-}
+    command:
+      - sh
+      - -c
+      - |
+        if [ -z "$$JWT_PRIVATE_KEY" ]; then
+          if [ ! -s /keys/jwt.pem ]; then
+            echo "Generating Ed25519 JWT signing key at /keys/jwt.pem"
+            openssl genpkey -algorithm ed25519 -out /keys/jwt.pem
+          fi
+          export JWT_PRIVATE_KEY="$$(cat /keys/jwt.pem)"
+        fi
+        exec .venv/bin/uvicorn verys.app:app --host 0.0.0.0 --port 8080
+    healthcheck:
+      # The image has no curl; discovery is served once the app has started.
+      test: ["CMD", ".venv/bin/python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/.well-known/openid-configuration')"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    depends_on:
+      mongo:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # One-shot: seeds the OAuth clients, role and test user into Verys' database
+  # after Verys' own startup seeding (default roles and OIDC scopes) has run.
+  # Idempotent, so it is harmless on every `docker compose up`.
+  verys-seed:
+    image: mongo:7
+    volumes:
+      - ./scripts/verys-seed.js:/seed.js:ro
+    environment:
+      SPA_ORIGIN: http://localhost:5173
+      VITE_VERYS_CLIENT_ID: ${VITE_VERYS_CLIENT_ID:-chud-money-spa}
+      CHUD_MONEY_API_CLIENT_ID: ${CHUD_MONEY_API_CLIENT_ID:-chud-money-api}
+      VERYS_DEV_EMAIL: ${VERYS_DEV_EMAIL:-dev@example.com}
+    command: ["mongosh", "mongodb://mongo:27017/verys", "--quiet", "--file", "/seed.js"]
+    depends_on:
+      verys:
+        condition: service_healthy
+    restart: "no"
+
+secrets:
+  kalshi_key:
+    file: ${KALSHI_PRIVATE_KEY_FILE:-~/.ssh/id_kalshi}
+
+volumes:
+  mongo-data:
+  questdb-data:
+  verys-keys:
