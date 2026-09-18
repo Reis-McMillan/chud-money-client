@@ -38,20 +38,29 @@ rather have Verys email real codes.
 ## Docker image
 
 The `Dockerfile` builds the bundle with Node and serves it with nginx on port
-8080, the same shape as the other front ends in the `deploy` submodule. Vite
-inlines the `VITE_*` settings at build time, so the target environment is fixed
-when the image is built; the defaults point at `api.chud-money.mcmlln.dev` and
-`api.verys.mcmlln.dev` with the client ids from `.env.example`.
+8080, the same shape as the other front ends in the `deploy` submodule. The
+bundle itself is environment-agnostic: before the app loads it fetches
+`/config.js`, which nginx renders from the container's environment at start,
+so the target environment is chosen when the container runs rather than when
+the image is built.
+
+| Variable               | Default                              |
+| ---------------------- | ------------------------------------ |
+| `API_BASE`             | `https://api.chud-money.mcmlln.dev`  |
+| `VERYS_URL`            | `https://api.verys.mcmlln.dev`       |
+| `VERYS_CLIENT_ID`      | `chud-money-spa`                     |
+| `CHUD_MONEY_CLIENT_ID` | `chud-money-api`                     |
 
 ```sh
 docker build -t chud-money-client .
-docker build -t chud-money-client --build-arg VITE_API_BASE=https://api.example.com .
 docker run --rm -p 8080:8080 chud-money-client
+docker run --rm -p 8080:8080 -e API_BASE=https://api.example.com chud-money-client
 ```
 
-The image is not part of `docker-compose.yaml`, which only runs what this app
-depends on; use `npm run dev` locally. For a deployment the Verys used there
-must have the SPA's origin in the SPA client's `redirect_uris` (both
+`VITE_*` in `.env.local` still applies to `npm run dev`, where `/config.js`
+is the empty stub in `public/`. The image is not part of `docker-compose.yaml`,
+which only runs what this app depends on. For a deployment the Verys used
+there must have the SPA's origin in the SPA client's `redirect_uris` (both
 `/auth/callback` and `/`) and in its CORS `ALLOWED_ORIGINS`.
 
 ## Recommended IDE Setup

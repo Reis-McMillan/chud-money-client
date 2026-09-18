@@ -14,3 +14,15 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv
 }
+
+/** Shape of `window.__CHUD_CONFIG__`, set by `/config.js` before the app loads. */
+interface ChudRuntimeConfig {
+  readonly apiBase?: string
+  readonly verysUrl?: string
+  readonly verysClientId?: string
+  readonly chudMoneyClientId?: string
+}
+
+interface Window {
+  __CHUD_CONFIG__?: ChudRuntimeConfig
+}
