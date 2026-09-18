@@ -68,6 +68,15 @@ export interface TableSummary {
   max_value: number | null
 }
 
+/** What `contract_candles_hist` holds for one series. */
+export interface CandleSummary {
+  table: string
+  rows: number
+  markets: number
+  first_ts: string | null
+  last_ts: string | null
+}
+
 /** `GET /{tag}` response: Market nested under `market`. */
 export interface MarketDetail {
   market: Market
@@ -75,6 +84,7 @@ export interface MarketDetail {
   questdb: {
     live: TableSummary
     hist: TableSummary
+    contracts: CandleSummary
   }
 }
 
@@ -92,8 +102,16 @@ export interface DeleteResult {
   feed_stopped: boolean
 }
 
+/**
+ * `index`: the CF Benchmarks index the series settles on. `contracts`: the
+ * prices the series' contracts traded at, as 1-minute candlesticks.
+ */
+export type IngestKind = 'index' | 'contracts'
+
 export interface IngestBody {
   tag: string
+  /** Defaults to `index` on the backend. */
+  kind?: IngestKind
   /** RFC 3339 */
   start: string
   /** RFC 3339 */
@@ -103,7 +121,9 @@ export interface IngestBody {
 export interface IngestAccepted {
   job_id: string
   tag: string
+  kind: IngestKind
   index_id: string
+  series_ticker: string
   cursor_ms: number
   end_ms: number
 }
@@ -113,12 +133,17 @@ export type JobStatus = 'running' | 'done' | 'failed'
 export interface IngestJob {
   job_id: string
   tag: string
+  kind: IngestKind
   index_id: string
+  series_ticker: string
   status: JobStatus
   timespan: string
   start_ms: number
   end_ms: number
   cursor_ms: number
+  /** `contracts` only: markets found in range, and how many are done. */
+  markets_total: number
+  markets_done: number
   requests: number
   rows: number
   error: string | null

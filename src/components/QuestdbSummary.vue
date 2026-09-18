@@ -1,11 +1,13 @@
 <script setup lang="ts">
-import type { TableSummary } from '@/api/types'
+import type { CandleSummary, TableSummary } from '@/api/types'
 import { fmtAgo, fmtInt, fmtTs, fmtUsd } from '@/utils/format'
 
 defineProps<{
   live: TableSummary
   hist: TableSummary
+  contracts: CandleSummary
   indexId: string
+  seriesTicker: string
   refreshing: boolean
   refreshedAt: number | null
 }>()
@@ -69,6 +71,31 @@ const tables = [
         <span class="font-mono tabular-nums">
           {{ fmtUsd($props[t.key].min_value) }} / {{ fmtUsd($props[t.key].max_value) }}
         </span>
+      </div>
+    </div>
+
+    <div class="rounded-md border border-border/70 bg-bg/40 p-3">
+      <div class="mb-1 flex items-baseline justify-between">
+        <span class="text-xs font-semibold tracking-wide uppercase">contracts</span>
+        <span class="font-mono text-[11px] text-muted"
+          >{{ contracts.table }} · {{ seriesTicker }}</span
+        >
+      </div>
+      <div class="stat-row">
+        <span class="text-muted">rows</span>
+        <span class="font-mono tabular-nums">{{ fmtInt(contracts.rows) }}</span>
+      </div>
+      <div class="stat-row">
+        <span class="text-muted">markets</span>
+        <span class="font-mono tabular-nums">{{ fmtInt(contracts.markets) }}</span>
+      </div>
+      <div class="stat-row">
+        <span class="text-muted">first</span>
+        <span class="font-mono text-xs tabular-nums">{{ fmtTs(contracts.first_ts) }}</span>
+      </div>
+      <div class="stat-row">
+        <span class="text-muted">last</span>
+        <span class="font-mono text-xs tabular-nums">{{ fmtTs(contracts.last_ts) }}</span>
       </div>
     </div>
   </section>

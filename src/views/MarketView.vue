@@ -132,17 +132,20 @@ const openTickers = computed(() => detail.value?.feed?.open_tickers ?? [])
         :feed="detail.feed"
       />
 
-      <div class="grid grid-cols-1 gap-4 lg:grid-cols-3">
+      <div class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
         <OrderbookPanel :tag="detail.market.tag" :open-tickers="openTickers" />
         <QuestdbSummary
           :live="detail.questdb.live"
           :hist="detail.questdb.hist"
+          :contracts="detail.questdb.contracts"
           :index-id="detail.market.index_id"
+          :series-ticker="detail.market.series_ticker"
           :refreshing="refreshing"
           :refreshed-at="refreshedAt"
           @refresh="load(false)"
         />
         <IngestPanel :tag="detail.market.tag" @done="load(false)" />
+        <IngestPanel :tag="detail.market.tag" kind="contracts" @done="load(false)" />
       </div>
     </template>
   </div>

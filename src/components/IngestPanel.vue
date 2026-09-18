@@ -1,14 +1,30 @@
 <script setup lang="ts">
 import { computed, reactive, watch } from 'vue'
 
+import type { IngestKind } from '@/api/types'
 import { useIngestJob } from '@/composables/useIngestJob'
 import { fmtInt, fmtTs } from '@/utils/format'
 import { localToRfc3339, toDatetimeLocal } from '@/utils/time'
 
-const props = defineProps<{ tag: string }>()
+const props = withDefaults(defineProps<{ tag: string; kind?: IngestKind }>(), { kind: 'index' })
 const emit = defineEmits<{ done: [] }>()
 
-const ingest = useIngestJob(() => props.tag)
+// A panel is mounted for one kind and never switches.
+const ingest = useIngestJob(() => props.tag, props.kind)
+
+const COPY: Record<IngestKind, { title: string; target: string; how: string }> = {
+  index: {
+    title: 'Ingest history',
+    target: 'REST backfill into index_values_hist',
+    how: 'fetched one hour per request at the finest resolution the upstream offers, stepping from the start (aligned to the hour) until the end.',
+  },
+  contracts: {
+    title: 'Ingest contract prices',
+    target: 'REST backfill into contract_candles_hist',
+    how: '1-minute candlesticks (yes bid/ask, trade price, volume, open interest) of every market of the series that was open during the range, one request per market.',
+  },
+}
+const copy = computed(() => COPY[props.kind])
 
 const now = new Date()
 const form = reactive({
@@ -73,8 +89,8 @@ function submit() {
 <template>
   <section class="card flex flex-col gap-3">
     <div class="flex items-center justify-between gap-2">
-      <h3 class="text-sm font-semibold">Ingest history</h3>
-      <span class="text-xs text-muted">REST backfill into index_values_hist</span>
+      <h3 class="text-sm font-semibold">{{ copy.title }}</h3>
+      <span class="text-xs text-muted">{{ copy.target }}</span>
     </div>
 
     <form class="flex flex-col gap-3" @submit.prevent="submit">
@@ -88,8 +104,7 @@ function submit() {
       </label>
       <p class="text-[11px] text-muted">
         <span v-if="rangeHint">range: {{ rangeHint }} · </span>
-        fetched one hour per request at the finest resolution the upstream offers, stepping from the
-        start (aligned to the hour) until the end.
+        {{ copy.how }}
       </p>
 
       <ul v-if="problems.length" class="space-y-0.5 text-xs text-warn">
@@ -144,6 +159,16 @@ function submit() {
       <div class="stat-row">
         <span class="text-muted">timespan</span>
         <span class="font-mono">{{ ingest.job.value.timespan }}</span>
+      </div>
+      <div v-if="ingest.job.value.kind === 'contracts'" class="stat-row">
+        <span class="text-muted">markets</span>
+        <span class="font-mono tabular-nums">
+          <template v-if="ingest.job.value.markets_total || !running">
+            {{ fmtInt(ingest.job.value.markets_done) }} /
+            {{ fmtInt(ingest.job.value.markets_total) }}
+          </template>
+          <template v-else>listing…</template>
+        </span>
       </div>
       <div class="stat-row">
         <span class="text-muted">requests / rows</span>
