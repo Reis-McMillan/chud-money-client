@@ -116,6 +116,8 @@ export interface IngestBody {
   start: string
   /** RFC 3339 */
   end: string
+  /** Fetch everything again, even what QuestDB already holds. */
+  force?: boolean
 }
 
 export interface IngestAccepted {
@@ -144,6 +146,12 @@ export interface IngestJob {
   /** `contracts` only: markets found in range, and how many are done. */
   markets_total: number
   markets_done: number
+  force: boolean
+  /** Hour windows (`index`) or markets (`contracts`) QuestDB already held. */
+  skipped: number
+  retries: number
+  /** Why the call in flight is being retried; null once it succeeds. */
+  retry_error: string | null
   requests: number
   rows: number
   error: string | null

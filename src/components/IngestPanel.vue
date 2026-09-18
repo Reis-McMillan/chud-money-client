@@ -30,6 +30,7 @@ const now = new Date()
 const form = reactive({
   start: toDatetimeLocal(new Date(now.getTime() - 24 * 3600 * 1000)),
   end: toDatetimeLocal(now),
+  force: false,
 })
 
 const problems = computed(() => {
@@ -82,7 +83,7 @@ function submit() {
   const start = localToRfc3339(form.start)
   const end = localToRfc3339(form.end)
   if (!start || !end) return
-  void ingest.start({ start, end })
+  void ingest.start({ start, end, force: form.force })
 }
 </script>
 
@@ -101,6 +102,10 @@ function submit() {
       <label>
         <span class="label">end <span class="normal-case opacity-60">(local time)</span></span>
         <input v-model="form.end" type="datetime-local" step="1" class="input" required />
+      </label>
+      <label class="flex items-center gap-2 text-xs text-muted">
+        <input v-model="form.force" type="checkbox" />
+        re-fetch data QuestDB already holds
       </label>
       <p class="text-[11px] text-muted">
         <span v-if="rangeHint">range: {{ rangeHint }} · </span>
@@ -177,6 +182,18 @@ function submit() {
         </span>
       </div>
       <div class="stat-row">
+        <span class="text-muted">
+          skipped {{ ingest.job.value.kind === 'contracts' ? 'markets' : 'windows' }}
+        </span>
+        <span class="font-mono tabular-nums">
+          {{ ingest.job.value.force ? 'off (forced)' : fmtInt(ingest.job.value.skipped) }}
+        </span>
+      </div>
+      <div v-if="ingest.job.value.retries" class="stat-row">
+        <span class="text-muted">retries</span>
+        <span class="font-mono text-warn tabular-nums">{{ fmtInt(ingest.job.value.retries) }}</span>
+      </div>
+      <div class="stat-row">
         <span class="text-muted">cursor</span>
         <span class="font-mono text-xs tabular-nums">{{
           fmtTs(new Date(ingest.job.value.cursor_ms).toISOString())
@@ -191,6 +208,12 @@ function submit() {
         <span class="font-mono text-xs tabular-nums">{{
           fmtTs(ingest.job.value.finished_at)
         }}</span>
+      </div>
+      <div
+        v-if="running && ingest.job.value.retry_error"
+        class="mt-2 text-xs break-words text-warn"
+      >
+        retrying: {{ ingest.job.value.retry_error }}
       </div>
       <div v-if="ingest.job.value.error" class="mt-2 text-xs break-words text-down">
         {{ ingest.job.value.error }}
