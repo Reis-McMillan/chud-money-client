@@ -6,7 +6,15 @@ import { useIngestJob } from '@/composables/useIngestJob'
 import { fmtInt, fmtTs } from '@/utils/format'
 import { localToRfc3339, toDatetimeLocal } from '@/utils/time'
 
-const props = withDefaults(defineProps<{ tag: string; kind?: IngestKind }>(), { kind: 'index' })
+const props = withDefaults(
+  defineProps<{
+    tag: string
+    kind?: IngestKind
+    /** `coinbase` only: the market's product, offered as the default. */
+    product?: string
+  }>(),
+  { kind: 'index', product: undefined },
+)
 const emit = defineEmits<{ done: [] }>()
 
 // A panel is mounted for one kind and never switches.
@@ -23,13 +31,20 @@ const COPY: Record<IngestKind, { title: string; target: string; how: string }> =
     target: 'REST backfill into contract_candles_hist',
     how: '1-minute candlesticks (yes bid/ask, trade price, volume, open interest) of every market of the series that was open during the range, one request per market.',
   },
+  coinbase: {
+    title: 'Ingest Coinbase candles',
+    target: 'REST backfill into coinbase_candles_hist',
+    how: '1-minute spot candles (open, high, low, close, volume), five hours per request, stepping from the start (aligned to the hour) until the end.',
+  },
 }
 const copy = computed(() => COPY[props.kind])
+const PRODUCT_RE = /^[A-Z0-9]+-[A-Z0-9]+$/
 
 const now = new Date()
 const form = reactive({
   start: toDatetimeLocal(new Date(now.getTime() - 24 * 3600 * 1000)),
   end: toDatetimeLocal(now),
+  product: props.product ?? '',
   force: false,
 })
 
@@ -40,6 +55,9 @@ const problems = computed(() => {
   if (!s) out.push('start is not a valid time')
   if (!e) out.push('end is not a valid time')
   if (s && e && e <= s) out.push('end must be after start')
+  if (props.kind === 'coinbase' && !PRODUCT_RE.test(form.product)) {
+    out.push('product: a Coinbase product id like BTC-USD')
+  }
   return out
 })
 
@@ -83,7 +101,8 @@ function submit() {
   const start = localToRfc3339(form.start)
   const end = localToRfc3339(form.end)
   if (!start || !end) return
-  void ingest.start({ start, end, force: form.force })
+  const product = props.kind === 'coinbase' ? form.product : undefined
+  void ingest.start({ start, end, force: form.force, product })
 }
 </script>
 
@@ -95,6 +114,18 @@ function submit() {
     </div>
 
     <form class="flex flex-col gap-3" @submit.prevent="submit">
+      <label v-if="kind === 'coinbase'">
+        <span class="label">product</span>
+        <input
+          v-model.trim="form.product"
+          class="input uppercase"
+          placeholder="BTC-USD"
+          autocomplete="off"
+          spellcheck="false"
+          required
+          @input="form.product = form.product.toUpperCase()"
+        />
+      </label>
       <label>
         <span class="label">start <span class="normal-case opacity-60">(local time)</span></span>
         <input v-model="form.start" type="datetime-local" step="1" class="input" required />
@@ -160,6 +191,10 @@ function submit() {
       <div class="stat-row">
         <span class="text-muted">progress</span>
         <span class="font-mono tabular-nums">{{ (ingest.progress.value * 100).toFixed(1) }}%</span>
+      </div>
+      <div v-if="ingest.job.value.product" class="stat-row">
+        <span class="text-muted">product</span>
+        <span class="font-mono">{{ ingest.job.value.product }}</span>
       </div>
       <div class="stat-row">
         <span class="text-muted">timespan</span>

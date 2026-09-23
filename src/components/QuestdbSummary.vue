@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import type { CandleSummary, TableSummary } from '@/api/types'
+import type { CandleSummary, CoinbaseSummary, TableSummary } from '@/api/types'
 import { fmtAgo, fmtInt, fmtTs, fmtUsd } from '@/utils/format'
 
 defineProps<{
   live: TableSummary
   hist: TableSummary
   contracts: CandleSummary
+  coinbase: CoinbaseSummary | null
   indexId: string
   seriesTicker: string
   refreshing: boolean
@@ -96,6 +97,31 @@ const tables = [
       <div class="stat-row">
         <span class="text-muted">last</span>
         <span class="font-mono text-xs tabular-nums">{{ fmtTs(contracts.last_ts) }}</span>
+      </div>
+    </div>
+
+    <div v-if="coinbase" class="rounded-md border border-border/70 bg-bg/40 p-3">
+      <div class="mb-1 flex items-baseline justify-between">
+        <span class="text-xs font-semibold tracking-wide uppercase">coinbase</span>
+        <span class="font-mono text-[11px] text-muted"
+          >{{ coinbase.table }} · {{ coinbase.product }}</span
+        >
+      </div>
+      <div class="stat-row">
+        <span class="text-muted">rows</span>
+        <span class="font-mono tabular-nums">{{ fmtInt(coinbase.rows) }}</span>
+      </div>
+      <div class="stat-row">
+        <span class="text-muted">first</span>
+        <span class="font-mono text-xs tabular-nums">{{ fmtTs(coinbase.first_ts) }}</span>
+      </div>
+      <div class="stat-row">
+        <span class="text-muted">last</span>
+        <span class="font-mono text-xs tabular-nums">{{ fmtTs(coinbase.last_ts) }}</span>
+      </div>
+      <div class="stat-row">
+        <span class="text-muted">last close</span>
+        <span class="font-mono tabular-nums">{{ fmtUsd(coinbase.last_close) }}</span>
       </div>
     </div>
   </section>

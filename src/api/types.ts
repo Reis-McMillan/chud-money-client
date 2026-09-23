@@ -19,6 +19,8 @@ export interface Market {
   tag: string
   series_ticker: string
   index_id: string
+  /** Coinbase spot product whose candles augment the index, e.g. `BTC-USD`. */
+  coinbase_product?: string
   title: string
   kalshi: KalshiInfo
   proxy: ProxyInfo
@@ -77,6 +79,16 @@ export interface CandleSummary {
   last_ts: string | null
 }
 
+/** What `coinbase_candles_hist` holds for one product. */
+export interface CoinbaseSummary {
+  table: string
+  product: string
+  rows: number
+  first_ts: string | null
+  last_ts: string | null
+  last_close: number | null
+}
+
 /** `GET /{tag}` response: Market nested under `market`. */
 export interface MarketDetail {
   market: Market
@@ -85,6 +97,8 @@ export interface MarketDetail {
     live: TableSummary
     hist: TableSummary
     contracts: CandleSummary
+    /** null for a market without a `coinbase_product`. */
+    coinbase: CoinbaseSummary | null
   }
 }
 
@@ -92,6 +106,7 @@ export interface AddMarketBody {
   tag: string
   series_ticker: string
   index_id: string
+  coinbase_product?: string
   title?: string
   kalshi_env?: KalshiEnv
 }
@@ -105,8 +120,9 @@ export interface DeleteResult {
 /**
  * `index`: the CF Benchmarks index the series settles on. `contracts`: the
  * prices the series' contracts traded at, as 1-minute candlesticks.
+ * `coinbase`: 1-minute spot candles of a Coinbase product.
  */
-export type IngestKind = 'index' | 'contracts'
+export type IngestKind = 'index' | 'contracts' | 'coinbase'
 
 export interface IngestBody {
   tag: string
@@ -116,6 +132,8 @@ export interface IngestBody {
   start: string
   /** RFC 3339 */
   end: string
+  /** `coinbase` only: overrides the market's `coinbase_product`. */
+  product?: string
   /** Fetch everything again, even what QuestDB already holds. */
   force?: boolean
 }
@@ -138,6 +156,8 @@ export interface IngestJob {
   kind: IngestKind
   index_id: string
   series_ticker: string
+  /** `coinbase` only. */
+  product: string | null
   status: JobStatus
   timespan: string
   start_ms: number
@@ -147,7 +167,7 @@ export interface IngestJob {
   markets_total: number
   markets_done: number
   force: boolean
-  /** Hour windows (`index`) or markets (`contracts`) QuestDB already held. */
+  /** Windows (`index`, `coinbase`) or markets (`contracts`) QuestDB already held. */
   skipped: number
   retries: number
   /** Why the call in flight is being retried; null once it succeeds. */

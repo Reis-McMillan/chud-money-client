@@ -138,6 +138,7 @@ const openTickers = computed(() => detail.value?.feed?.open_tickers ?? [])
           :live="detail.questdb.live"
           :hist="detail.questdb.hist"
           :contracts="detail.questdb.contracts"
+          :coinbase="detail.questdb.coinbase ?? null"
           :index-id="detail.market.index_id"
           :series-ticker="detail.market.series_ticker"
           :refreshing="refreshing"
@@ -146,6 +147,12 @@ const openTickers = computed(() => detail.value?.feed?.open_tickers ?? [])
         />
         <IngestPanel :tag="detail.market.tag" @done="load(false)" />
         <IngestPanel :tag="detail.market.tag" kind="contracts" @done="load(false)" />
+        <IngestPanel
+          :tag="detail.market.tag"
+          kind="coinbase"
+          :product="detail.market.coinbase_product"
+          @done="load(false)"
+        />
       </div>
     </template>
   </div>

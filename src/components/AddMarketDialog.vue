@@ -10,6 +10,7 @@ const emit = defineEmits<{ close: []; added: [market: MarketView] }>()
 const TAG_RE = /^[a-z0-9][a-z0-9-]{1,63}$/
 const SERIES_RE = /^[A-Z0-9]+$/
 const INDEX_RE = /^[A-Z0-9_]+$/
+const PRODUCT_RE = /^[A-Z0-9]+-[A-Z0-9]+$/
 const RESERVED = new Set(['add', 'ingest', 'ws'])
 
 const dialog = ref<HTMLDialogElement | null>(null)
@@ -17,6 +18,7 @@ const form = reactive({
   tag: '',
   series_ticker: '',
   index_id: '',
+  coinbase_product: '',
   title: '',
   kalshi_env: '' as '' | KalshiEnv,
 })
@@ -30,6 +32,9 @@ const problems = computed(() => {
   else if (RESERVED.has(form.tag)) out.push(`tag: "${form.tag}" is reserved`)
   if (!SERIES_RE.test(form.series_ticker)) out.push('series ticker: uppercase letters and digits')
   if (!INDEX_RE.test(form.index_id)) out.push('index id: uppercase letters, digits and underscores')
+  if (form.coinbase_product && !PRODUCT_RE.test(form.coinbase_product)) {
+    out.push('coinbase product: an id like BTC-USD')
+  }
   if (form.title.length > 200) out.push('title: at most 200 chars')
   return out
 })
@@ -53,6 +58,7 @@ function reset() {
   form.tag = ''
   form.series_ticker = ''
   form.index_id = ''
+  form.coinbase_product = ''
   form.title = ''
   form.kalshi_env = ''
   error.value = null
@@ -69,6 +75,7 @@ async function submit() {
     series_ticker: form.series_ticker,
     index_id: form.index_id,
   }
+  if (form.coinbase_product) body.coinbase_product = form.coinbase_product
   if (form.title.trim()) body.title = form.title.trim()
   if (form.kalshi_env) body.kalshi_env = form.kalshi_env
   try {
@@ -133,6 +140,19 @@ async function submit() {
             spellcheck="false"
             required
             @input="form.index_id = form.index_id.toUpperCase()"
+          />
+        </label>
+        <label>
+          <span class="label"
+            >coinbase product <span class="normal-case opacity-60">(optional)</span></span
+          >
+          <input
+            v-model.trim="form.coinbase_product"
+            class="input uppercase"
+            placeholder="BTC-USD"
+            autocomplete="off"
+            spellcheck="false"
+            @input="form.coinbase_product = form.coinbase_product.toUpperCase()"
           />
         </label>
         <label class="sm:col-span-2">
