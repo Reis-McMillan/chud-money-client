@@ -1,14 +1,21 @@
 <script setup lang="ts">
-import type { CandleSummary, CoinbaseSummary, TableSummary } from '@/api/types'
+import { computed } from 'vue'
+
+import type { CandleSummary, LiveSummary, TableSummary } from '@/api/types'
 import { fmtAgo, fmtInt, fmtTs, fmtUsd } from '@/utils/format'
 
-defineProps<{
+const props = defineProps<{
   live: TableSummary
   hist: TableSummary
   contracts: CandleSummary
-  coinbase: CoinbaseSummary | null
+  contractTicker: LiveSummary
+  contractBook: LiveSummary
+  /** null for a market without a `coinbase_product`. */
+  coinbaseTicker: LiveSummary | null
+  coinbaseBook: LiveSummary | null
   indexId: string
   seriesTicker: string
+  coinbaseProduct?: string
   refreshing: boolean
   refreshedAt: number | null
 }>()
@@ -18,6 +25,22 @@ const tables = [
   { key: 'live', label: 'live', hint: 'ws_5hz' },
   { key: 'hist', label: 'history', hint: 'rest backfill' },
 ] as const
+
+/** The websocket feed tables, in the order the data flows: Kalshi then Coinbase. */
+const feeds = computed(() => {
+  const out: { label: string; hint: string; summary: LiveSummary }[] = [
+    { label: 'kalshi ticker', hint: props.seriesTicker, summary: props.contractTicker },
+    { label: 'kalshi book', hint: props.seriesTicker, summary: props.contractBook },
+  ]
+  const product = props.coinbaseProduct ?? '?'
+  if (props.coinbaseTicker) {
+    out.push({ label: 'coinbase ticker', hint: product, summary: props.coinbaseTicker })
+  }
+  if (props.coinbaseBook) {
+    out.push({ label: 'coinbase book', hint: product, summary: props.coinbaseBook })
+  }
+  return out
+})
 </script>
 
 <template>
@@ -100,28 +123,30 @@ const tables = [
       </div>
     </div>
 
-    <div v-if="coinbase" class="rounded-md border border-border/70 bg-bg/40 p-3">
+    <div
+      v-for="f in feeds"
+      :key="f.summary.table"
+      class="rounded-md border border-border/70 bg-bg/40 p-3"
+    >
       <div class="mb-1 flex items-baseline justify-between">
-        <span class="text-xs font-semibold tracking-wide uppercase">coinbase</span>
-        <span class="font-mono text-[11px] text-muted"
-          >{{ coinbase.table }} · {{ coinbase.product }}</span
-        >
+        <span class="text-xs font-semibold tracking-wide uppercase">{{ f.label }}</span>
+        <span class="font-mono text-[11px] text-muted">{{ f.summary.table }} · {{ f.hint }}</span>
       </div>
       <div class="stat-row">
         <span class="text-muted">rows</span>
-        <span class="font-mono tabular-nums">{{ fmtInt(coinbase.rows) }}</span>
+        <span class="font-mono tabular-nums">{{ fmtInt(f.summary.rows) }}</span>
+      </div>
+      <div class="stat-row">
+        <span class="text-muted">rows last hour</span>
+        <span class="font-mono tabular-nums">{{ fmtInt(f.summary.rows_last_hour) }}</span>
       </div>
       <div class="stat-row">
         <span class="text-muted">first</span>
-        <span class="font-mono text-xs tabular-nums">{{ fmtTs(coinbase.first_ts) }}</span>
+        <span class="font-mono text-xs tabular-nums">{{ fmtTs(f.summary.first_ts) }}</span>
       </div>
       <div class="stat-row">
         <span class="text-muted">last</span>
-        <span class="font-mono text-xs tabular-nums">{{ fmtTs(coinbase.last_ts) }}</span>
-      </div>
-      <div class="stat-row">
-        <span class="text-muted">last close</span>
-        <span class="font-mono tabular-nums">{{ fmtUsd(coinbase.last_close) }}</span>
+        <span class="font-mono text-xs tabular-nums">{{ fmtTs(f.summary.last_ts) }}</span>
       </div>
     </div>
   </section>

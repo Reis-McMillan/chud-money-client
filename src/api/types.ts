@@ -19,7 +19,7 @@ export interface Market {
   tag: string
   series_ticker: string
   index_id: string
-  /** Coinbase spot product whose candles augment the index, e.g. `BTC-USD`. */
+  /** Coinbase spot product streamed alongside the market (ticker + level2 book), e.g. `BTC-USD`. */
   coinbase_product?: string
   title: string
   kalshi: KalshiInfo
@@ -44,6 +44,20 @@ export interface OpenMarket {
   yes_sub_title: string | null
 }
 
+/** The Coinbase half of a market's feed; only for markets with a `coinbase_product`. */
+export interface CoinbaseFeedStatus {
+  product: string
+  connected: boolean
+  reconnects: number
+  ticker_msgs: number
+  book_msgs: number
+  /** Rows not written because the QuestDB queue was full. */
+  dropped_rows: number
+  last_price: number | null
+  last_msg_at: string | null
+  last_error: string | null
+}
+
 export interface FeedStatus {
   connected: boolean
   reconnects: number
@@ -51,9 +65,16 @@ export interface FeedStatus {
   open_markets: OpenMarket[]
   last_value: number | null
   last_msg_at: string | null
+  /** CF Benchmarks 5Hz frames. */
   ticker_msgs: number
+  /** Kalshi per-market `ticker` frames. */
+  contract_ticker_msgs: number
   orderbook_msgs: number
+  /** Rows not written because the QuestDB queue was full. */
+  dropped_rows: number
   last_error: string | null
+  /** null for a market without a `coinbase_product`. */
+  coinbase: CoinbaseFeedStatus | null
 }
 
 /** `GET /` element and `POST /add` response: Market fields flattened. */
@@ -79,14 +100,13 @@ export interface CandleSummary {
   last_ts: string | null
 }
 
-/** What `coinbase_candles_hist` holds for one product. */
-export interface CoinbaseSummary {
+/** What one `*_live` feed table holds for one series or product. */
+export interface LiveSummary {
   table: string
-  product: string
   rows: number
+  rows_last_hour: number
   first_ts: string | null
   last_ts: string | null
-  last_close: number | null
 }
 
 /** `GET /{tag}` response: Market nested under `market`. */
@@ -97,8 +117,13 @@ export interface MarketDetail {
     live: TableSummary
     hist: TableSummary
     contracts: CandleSummary
+    /** Kalshi `ticker` frames of the series (`contract_ticker_live`). */
+    contract_ticker: LiveSummary
+    /** Kalshi orderbook snapshots + deltas of the series (`contract_book_live`). */
+    contract_book: LiveSummary
     /** null for a market without a `coinbase_product`. */
-    coinbase: CoinbaseSummary | null
+    coinbase_ticker: LiveSummary | null
+    coinbase_book: LiveSummary | null
   }
 }
 
@@ -120,9 +145,8 @@ export interface DeleteResult {
 /**
  * `index`: the CF Benchmarks index the series settles on. `contracts`: the
  * prices the series' contracts traded at, as 1-minute candlesticks.
- * `coinbase`: 1-minute spot candles of a Coinbase product.
  */
-export type IngestKind = 'index' | 'contracts' | 'coinbase'
+export type IngestKind = 'index' | 'contracts'
 
 export interface IngestBody {
   tag: string
@@ -132,8 +156,6 @@ export interface IngestBody {
   start: string
   /** RFC 3339 */
   end: string
-  /** `coinbase` only: overrides the market's `coinbase_product`. */
-  product?: string
   /** Fetch everything again, even what QuestDB already holds. */
   force?: boolean
 }
@@ -156,8 +178,6 @@ export interface IngestJob {
   kind: IngestKind
   index_id: string
   series_ticker: string
-  /** `coinbase` only. */
-  product: string | null
   status: JobStatus
   timespan: string
   start_ms: number
@@ -167,7 +187,7 @@ export interface IngestJob {
   markets_total: number
   markets_done: number
   force: boolean
-  /** Windows (`index`, `coinbase`) or markets (`contracts`) QuestDB already held. */
+  /** Windows (`index`) or markets (`contracts`) QuestDB already held. */
   skipped: number
   retries: number
   /** Why the call in flight is being retried; null once it succeeds. */
@@ -221,6 +241,9 @@ export interface SnapshotFrame {
     no?: BookLevel[]
     yes_dollars?: BookLevelDollars[]
     no_dollars?: BookLevelDollars[]
+    /** Same levels under the names Kalshi's current docs use. */
+    yes_dollars_fp?: BookLevelDollars[]
+    no_dollars_fp?: BookLevelDollars[]
   }
 }
 

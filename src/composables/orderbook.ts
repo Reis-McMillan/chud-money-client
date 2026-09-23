@@ -4,9 +4,11 @@
 // no bid at $0.51 mean "buy yes at 0.47" and "sell yes at 1 - 0.51 = 0.49".
 // Current frames carry sub-cent prices as decimal strings (`price_dollars:
 // "0.0330"`) and fractional sizes (`delta_fp: "-232.21"`); older frames carried
-// integer cents (`price: 47`) and whole contracts (`delta: -120`). Both are
-// accepted and normalised to integers: prices in units of $0.0001, sizes in
-// hundredths of a contract. Integer math keeps deltas exact.
+// integer cents (`price: 47`) and whole contracts (`delta: -120`); snapshot
+// levels arrive as `yes_dollars_fp` / `no_dollars_fp` or the older
+// `yes_dollars` / `no_dollars`. All are accepted and normalised to integers:
+// prices in units of $0.0001, sizes in hundredths of a contract. Integer math
+// keeps deltas exact.
 
 import type { DeltaFrame, SnapshotFrame } from '@/api/types'
 
@@ -68,8 +70,8 @@ function levels(
 
 export function applySnapshot(books: Books, frame: SnapshotFrame, now = Date.now()): void {
   books.set(frame.msg.market_ticker, {
-    yes: levels(frame.msg.yes, frame.msg.yes_dollars),
-    no: levels(frame.msg.no, frame.msg.no_dollars),
+    yes: levels(frame.msg.yes, frame.msg.yes_dollars ?? frame.msg.yes_dollars_fp),
+    no: levels(frame.msg.no, frame.msg.no_dollars ?? frame.msg.no_dollars_fp),
     seq: frame.seq ?? 0,
     updatedAt: now,
   })

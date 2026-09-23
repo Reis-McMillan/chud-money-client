@@ -112,15 +112,31 @@ const openTickers = computed(() => detail.value?.feed?.open_tickers ?? [])
             {{ detail.market.series_ticker }} · {{ detail.market.index_id }} ·
             {{ detail.market.kalshi.env }}
             <template v-if="detail.feed">
-              · feed {{ detail.feed.connected ? 'connected' : 'disconnected' }}
+              · kalshi {{ detail.feed.connected ? 'connected' : 'disconnected' }}
               <span v-if="detail.feed.reconnects" class="text-warn"
                 >· {{ detail.feed.reconnects }} reconnects</span
+              >
+              <template v-if="detail.feed.coinbase">
+                · coinbase {{ detail.feed.coinbase.product }}
+                {{ detail.feed.coinbase.connected ? 'connected' : 'disconnected' }}
+                <span v-if="detail.feed.coinbase.reconnects" class="text-warn"
+                  >· {{ detail.feed.coinbase.reconnects }} reconnects</span
+                >
+              </template>
+              <span
+                v-if="detail.feed.dropped_rows || detail.feed.coinbase?.dropped_rows"
+                class="text-down"
+                >· {{ detail.feed.dropped_rows + (detail.feed.coinbase?.dropped_rows ?? 0) }} rows
+                dropped</span
               >
             </template>
             <span v-else class="text-warn">· no feed task running</span>
           </div>
           <div v-if="detail.feed?.last_error" class="mt-1 text-xs text-down">
             {{ detail.feed.last_error }}
+          </div>
+          <div v-if="detail.feed?.coinbase?.last_error" class="mt-1 text-xs text-down">
+            coinbase: {{ detail.feed.coinbase.last_error }}
           </div>
         </div>
         <div v-if="error" class="text-xs text-down">refresh failed: {{ error }}</div>
@@ -138,21 +154,19 @@ const openTickers = computed(() => detail.value?.feed?.open_tickers ?? [])
           :live="detail.questdb.live"
           :hist="detail.questdb.hist"
           :contracts="detail.questdb.contracts"
-          :coinbase="detail.questdb.coinbase ?? null"
+          :contract-ticker="detail.questdb.contract_ticker"
+          :contract-book="detail.questdb.contract_book"
+          :coinbase-ticker="detail.questdb.coinbase_ticker ?? null"
+          :coinbase-book="detail.questdb.coinbase_book ?? null"
           :index-id="detail.market.index_id"
           :series-ticker="detail.market.series_ticker"
+          :coinbase-product="detail.market.coinbase_product"
           :refreshing="refreshing"
           :refreshed-at="refreshedAt"
           @refresh="load(false)"
         />
         <IngestPanel :tag="detail.market.tag" @done="load(false)" />
         <IngestPanel :tag="detail.market.tag" kind="contracts" @done="load(false)" />
-        <IngestPanel
-          :tag="detail.market.tag"
-          kind="coinbase"
-          :product="detail.market.coinbase_product"
-          @done="load(false)"
-        />
       </div>
     </template>
   </div>
