@@ -1,44 +1,42 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 
-import type { CandleSummary, LiveSummary, TableSummary } from '@/api/types'
-import { fmtAgo, fmtInt, fmtTs, fmtUsd } from '@/utils/format'
+import type { SummarySnapshot, TableSummary } from '@/api/types'
+import { fmtAgo, fmtInt, fmtTs } from '@/utils/format'
 
 const props = defineProps<{
-  live: TableSummary
-  hist: TableSummary
-  contracts: CandleSummary
-  contractTicker: LiveSummary
-  contractBook: LiveSummary
-  /** null for a market without a `coinbase_product`. */
-  coinbaseTicker: LiveSummary | null
-  coinbaseBook: LiveSummary | null
+  /** The backend's cached summaries; `tables` is null until its first refresh. */
+  snapshot: SummarySnapshot
   indexId: string
   seriesTicker: string
   coinbaseProduct?: string
   refreshing: boolean
+  /** When this page last fetched the snapshot (not when the backend computed it). */
   refreshedAt: number | null
 }>()
 const emit = defineEmits<{ refresh: [] }>()
 
-const tables = [
-  { key: 'live', label: 'live', hint: 'ws_5hz' },
-  { key: 'hist', label: 'history', hint: 'rest backfill' },
-] as const
+interface Card {
+  label: string
+  hint: string
+  summary: TableSummary
+}
 
-/** The websocket feed tables, in the order the data flows: Kalshi then Coinbase. */
-const feeds = computed(() => {
-  const out: { label: string; hint: string; summary: LiveSummary }[] = [
-    { label: 'kalshi ticker', hint: props.seriesTicker, summary: props.contractTicker },
-    { label: 'kalshi book', hint: props.seriesTicker, summary: props.contractBook },
+/** One card per table, in the order the data flows: index, contracts, Kalshi, Coinbase. */
+const cards = computed<Card[]>(() => {
+  const t = props.snapshot.tables
+  if (!t) return []
+  const out: Card[] = [
+    { label: 'live', hint: 'ws_5hz', summary: t.live },
+    { label: 'history', hint: 'rest backfill', summary: t.hist },
+    { label: 'contracts', hint: props.seriesTicker, summary: t.contracts },
+    { label: 'kalshi ticker', hint: props.seriesTicker, summary: t.contract_ticker },
+    { label: 'kalshi book', hint: props.seriesTicker, summary: t.contract_book },
   ]
   const product = props.coinbaseProduct ?? '?'
-  if (props.coinbaseTicker) {
-    out.push({ label: 'coinbase ticker', hint: product, summary: props.coinbaseTicker })
-  }
-  if (props.coinbaseBook) {
-    out.push({ label: 'coinbase book', hint: product, summary: props.coinbaseBook })
-  }
+  if (t.coinbase_ticker)
+    out.push({ label: 'coinbase ticker', hint: product, summary: t.coinbase_ticker })
+  if (t.coinbase_book) out.push({ label: 'coinbase book', hint: product, summary: t.coinbase_book })
   return out
 })
 </script>
@@ -63,90 +61,36 @@ const feeds = computed(() => {
       </div>
     </div>
 
-    <div v-for="t in tables" :key="t.key" class="rounded-md border border-border/70 bg-bg/40 p-3">
-      <div class="mb-1 flex items-baseline justify-between">
-        <span class="text-xs font-semibold tracking-wide uppercase">{{ t.label }}</span>
-        <span class="font-mono text-[11px] text-muted"
-          >{{ $props[t.key].table }} · {{ t.hint }}</span
-        >
-      </div>
-      <div class="stat-row">
-        <span class="text-muted">rows</span>
-        <span class="font-mono tabular-nums">{{ fmtInt($props[t.key].rows) }}</span>
-      </div>
-      <div class="stat-row">
-        <span class="text-muted">rows last hour</span>
-        <span class="font-mono tabular-nums">{{ fmtInt($props[t.key].rows_last_hour) }}</span>
-      </div>
-      <div class="stat-row">
-        <span class="text-muted">first</span>
-        <span class="font-mono text-xs tabular-nums">{{ fmtTs($props[t.key].first_ts) }}</span>
-      </div>
-      <div class="stat-row">
-        <span class="text-muted">last</span>
-        <span class="font-mono text-xs tabular-nums">{{ fmtTs($props[t.key].last_ts) }}</span>
-      </div>
-      <div class="stat-row">
-        <span class="text-muted">last value</span>
-        <span class="font-mono tabular-nums">{{ fmtUsd($props[t.key].last_value) }}</span>
-      </div>
-      <div class="stat-row">
-        <span class="text-muted">min / max</span>
-        <span class="font-mono tabular-nums">
-          {{ fmtUsd($props[t.key].min_value) }} / {{ fmtUsd($props[t.key].max_value) }}
-        </span>
-      </div>
+    <!-- The backend recomputes these about once a minute; say how old they are. -->
+    <div class="text-xs text-muted">
+      <template v-if="snapshot.refreshed_at">counted {{ fmtAgo(snapshot.refreshed_at) }}</template>
+      <template v-else>waiting for the first count since the feed started…</template>
     </div>
-
-    <div class="rounded-md border border-border/70 bg-bg/40 p-3">
-      <div class="mb-1 flex items-baseline justify-between">
-        <span class="text-xs font-semibold tracking-wide uppercase">contracts</span>
-        <span class="font-mono text-[11px] text-muted"
-          >{{ contracts.table }} · {{ seriesTicker }}</span
-        >
-      </div>
-      <div class="stat-row">
-        <span class="text-muted">rows</span>
-        <span class="font-mono tabular-nums">{{ fmtInt(contracts.rows) }}</span>
-      </div>
-      <div class="stat-row">
-        <span class="text-muted">markets</span>
-        <span class="font-mono tabular-nums">{{ fmtInt(contracts.markets) }}</span>
-      </div>
-      <div class="stat-row">
-        <span class="text-muted">first</span>
-        <span class="font-mono text-xs tabular-nums">{{ fmtTs(contracts.first_ts) }}</span>
-      </div>
-      <div class="stat-row">
-        <span class="text-muted">last</span>
-        <span class="font-mono text-xs tabular-nums">{{ fmtTs(contracts.last_ts) }}</span>
-      </div>
+    <div v-if="snapshot.error" class="text-xs text-down">
+      last count failed: {{ snapshot.error }}
+      <template v-if="snapshot.tables"> (showing the previous one)</template>
     </div>
 
     <div
-      v-for="f in feeds"
-      :key="f.summary.table"
+      v-for="c in cards"
+      :key="c.summary.table"
       class="rounded-md border border-border/70 bg-bg/40 p-3"
     >
       <div class="mb-1 flex items-baseline justify-between">
-        <span class="text-xs font-semibold tracking-wide uppercase">{{ f.label }}</span>
-        <span class="font-mono text-[11px] text-muted">{{ f.summary.table }} · {{ f.hint }}</span>
+        <span class="text-xs font-semibold tracking-wide uppercase">{{ c.label }}</span>
+        <span class="font-mono text-[11px] text-muted">{{ c.summary.table }} · {{ c.hint }}</span>
       </div>
       <div class="stat-row">
         <span class="text-muted">rows</span>
-        <span class="font-mono tabular-nums">{{ fmtInt(f.summary.rows) }}</span>
-      </div>
-      <div class="stat-row">
-        <span class="text-muted">rows last hour</span>
-        <span class="font-mono tabular-nums">{{ fmtInt(f.summary.rows_last_hour) }}</span>
+        <span class="font-mono tabular-nums">{{ fmtInt(c.summary.rows) }}</span>
       </div>
       <div class="stat-row">
         <span class="text-muted">first</span>
-        <span class="font-mono text-xs tabular-nums">{{ fmtTs(f.summary.first_ts) }}</span>
+        <span class="font-mono text-xs tabular-nums">{{ fmtTs(c.summary.first_ts) }}</span>
       </div>
       <div class="stat-row">
         <span class="text-muted">last</span>
-        <span class="font-mono text-xs tabular-nums">{{ fmtTs(f.summary.last_ts) }}</span>
+        <span class="font-mono text-xs tabular-nums">{{ fmtTs(c.summary.last_ts) }}</span>
       </div>
     </div>
   </section>

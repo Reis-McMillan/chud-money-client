@@ -80,51 +80,48 @@ export interface FeedStatus {
 /** `GET /` element and `POST /add` response: Market fields flattened. */
 export type MarketView = Market & { feed: FeedStatus | null }
 
+/**
+ * Row count and time span of one market's rows in one QuestDB table. Count
+ * and span only: the backend computes these on a timer, not per request.
+ */
 export interface TableSummary {
   table: string
   rows: number
-  rows_last_hour: number
-  first_ts: string | null
-  last_ts: string | null
-  last_value: number | null
-  min_value: number | null
-  max_value: number | null
-}
-
-/** What `contract_candles_hist` holds for one series. */
-export interface CandleSummary {
-  table: string
-  rows: number
-  markets: number
   first_ts: string | null
   last_ts: string | null
 }
 
-/** What one `*_live` feed table holds for one series or product. */
-export interface LiveSummary {
-  table: string
-  rows: number
-  rows_last_hour: number
-  first_ts: string | null
-  last_ts: string | null
+/** What QuestDB holds for one market; the coinbase pair is null without a `coinbase_product`. */
+export interface QuestdbSummary {
+  live: TableSummary
+  hist: TableSummary
+  /** `contract_candles_hist` */
+  contracts: TableSummary
+  /** Kalshi `ticker` frames of the series (`contract_ticker_live`). */
+  contract_ticker: TableSummary
+  /** Kalshi orderbook snapshots + deltas of the series (`contract_book_live`). */
+  contract_book: TableSummary
+  coinbase_ticker: TableSummary | null
+  coinbase_book: TableSummary | null
+}
+
+/**
+ * The backend's cached summaries, refreshed about once a minute per market
+ * (src/feeds/summary.rs). `tables` is null until the first refresh after the
+ * feed started; a failed refresh keeps the previous tables and sets `error`.
+ */
+export interface SummarySnapshot {
+  tables: QuestdbSummary | null
+  /** RFC 3339; when `tables` was computed. */
+  refreshed_at: string | null
+  error: string | null
 }
 
 /** `GET /{tag}` response: Market nested under `market`. */
 export interface MarketDetail {
   market: Market
   feed: FeedStatus | null
-  questdb: {
-    live: TableSummary
-    hist: TableSummary
-    contracts: CandleSummary
-    /** Kalshi `ticker` frames of the series (`contract_ticker_live`). */
-    contract_ticker: LiveSummary
-    /** Kalshi orderbook snapshots + deltas of the series (`contract_book_live`). */
-    contract_book: LiveSummary
-    /** null for a market without a `coinbase_product`. */
-    coinbase_ticker: LiveSummary | null
-    coinbase_book: LiveSummary | null
-  }
+  questdb: SummarySnapshot
 }
 
 export interface AddMarketBody {

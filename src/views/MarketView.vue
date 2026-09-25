@@ -60,8 +60,8 @@ watch(
   { immediate: true },
 )
 
-// Open markets roll every 15 minutes and the QuestDB summary is a point-in-time
-// read, so keep the detail fresh in the background.
+// Open markets roll every 15 minutes and the backend recounts QuestDB about
+// once a minute, so keep the detail fresh in the background.
 const REFRESH_MS = 30_000
 let timer: ReturnType<typeof setInterval> | undefined
 onMounted(() => {
@@ -98,8 +98,7 @@ const openTickers = computed(() => detail.value?.feed?.open_tickers ?? [])
     <div v-else-if="error && !detail" class="card flex flex-col items-start gap-2">
       <p class="text-sm text-down">{{ error }}</p>
       <p class="text-xs text-muted">
-        The market page needs QuestDB for its summary; a "questdb query failed" error usually means
-        it is down.
+        The market page needs MongoDB for the document; QuestDB being down only blanks the summary.
       </p>
       <button type="button" class="btn" @click="load(true)">retry</button>
     </div>
@@ -151,13 +150,7 @@ const openTickers = computed(() => detail.value?.feed?.open_tickers ?? [])
       <div class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
         <OrderbookPanel :tag="detail.market.tag" :open-tickers="openTickers" />
         <QuestdbSummary
-          :live="detail.questdb.live"
-          :hist="detail.questdb.hist"
-          :contracts="detail.questdb.contracts"
-          :contract-ticker="detail.questdb.contract_ticker"
-          :contract-book="detail.questdb.contract_book"
-          :coinbase-ticker="detail.questdb.coinbase_ticker ?? null"
-          :coinbase-book="detail.questdb.coinbase_book ?? null"
+          :snapshot="detail.questdb"
           :index-id="detail.market.index_id"
           :series-ticker="detail.market.series_ticker"
           :coinbase-product="detail.market.coinbase_product"
